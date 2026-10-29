@@ -1,0 +1,14 @@
+# Байткод Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Выходные файлы отчетов
+*.csv
+*.json
+results/
+
+# Переменные окружения и IDE
+.env
+.idea/
+.vscode/
