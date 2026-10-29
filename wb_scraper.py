@@ -58,6 +58,16 @@ WB_WAREHOUSES: Dict[int, str] = {
     208277: "Невинномысск",
 }
 
+# Доступные режимы сортировки в API Wildberries
+SORT_MODES: Dict[str, str] = {
+    "popular": "popular",
+    "price_up": "priceup",
+    "price_down": "pricedown",
+    "rating": "rate",
+    "newly": "newly",
+}
+
+
 DEFAULT_USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -139,23 +149,25 @@ class WildberriesScraper:
             "Sec-Fetch-Site": "cross-site",
         }
 
-    def fetch_search_page(self, query: str, page: int = 1) -> List[ProductItem]:
+    def fetch_search_page(self, query: str, page: int = 1, sort: str = "popular") -> List[ProductItem]:
         """
         Сбор одной страницы каталога по поисковому запросу через прямой API.
 
         Args:
             query: Поисковый запрос (например, 'кроссовки мужские').
             page: Номер страницы каталога (с 1).
+            sort: Режим сортировки (popular, price_up, price_down, rating, newly).
 
         Returns:
             Список распарсенных объектов ProductItem.
         """
         encoded_query = urllib.parse.quote(query.strip())
+        wb_sort = SORT_MODES.get(sort, "popular")
         # dest=-1257786 — стандартный гео-регион Центральной России / Москвы
         url = (
             f"https://search.wb.ru/exactmatch/ru/common/v7/search?"
             f"curr=rub&dest=-1257786&query={encoded_query}&resultset=catalog"
-            f"&sort=popular&spp=30&suppressSpellcheck=false&page={page}"
+            f"&sort={wb_sort}&spp=30&suppressSpellcheck=false&page={page}"
         )
 
         logger.debug("Запрос страницы %d: %s", page, url)
@@ -251,7 +263,13 @@ class WildberriesScraper:
         return results
 
     @staticmethod
-    def generate_demo_catalog(query: str, count: int = 15) -> List[ProductItem]:
+    def generate_demo_catalog(
+        query: str,
+        count: int = 15,
+        sort: str = "popular",
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+    ) -> List[ProductItem]:
         """
         Генератор реалистичных демонстрационных данных для автономного тестирования.
 
@@ -302,6 +320,23 @@ class WildberriesScraper:
                     stocks_by_warehouse=stocks,
                 )
             )
+
+        # Применение ценовых фильтров
+        if min_price is not None:
+            items = [it for it in items if it.price_spp >= min_price]
+        if max_price is not None:
+            items = [it for it in items if it.price_spp <= max_price]
+
+        # Применение сортировки
+        if sort == "price_up":
+            items.sort(key=lambda x: x.price_spp)
+        elif sort == "price_down":
+            items.sort(key=lambda x: x.price_spp, reverse=True)
+        elif sort == "rating":
+            items.sort(key=lambda x: (x.rating, x.feedbacks), reverse=True)
+        elif sort == "newly":
+            items.sort(key=lambda x: x.sku, reverse=True)
+
         return items
 
 
@@ -462,6 +497,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Имя выходного файла (.csv или .json, по умолчанию: wb_products.csv).",
     )
     parser.add_argument(
+        "--sort",
+        type=str,
+        choices=list(SORT_MODES.keys()),
+        default="popular",
+        help="Режим сортировки каталога: popular, price_up, price_down, rating, newly (по умолчанию: popular).",
+    )
+    parser.add_argument(
+        "--min-price",
+        type=float,
+        default=None,
+        help="Минимальная цена товара в рублях (фильтр по цене со скидкой СПП).",
+    )
+    parser.add_argument(
+        "--max-price",
+        type=float,
+        default=None,
+        help="Максимальная цена товара в рублях (фильтр по цене со скидкой СПП).",
+    )
+    parser.add_argument(
         "--demo",
         action="store_true",
         help="Демонстрационный режим: генерация реалистичного отчёта офлайн без обращения к сети.",
@@ -506,7 +560,13 @@ def main() -> None:
     if args.demo:
         query_text = args.query or "демо-товары"
         logger.info("Активирован демонстрационный режим для запроса: '%s'", query_text)
-        products = scraper.generate_demo_catalog(query=query_text, count=25)
+        products = scraper.generate_demo_catalog(
+            query=query_text,
+            count=25,
+            sort=args.sort,
+            min_price=args.min_price,
+            max_price=args.max_price,
+        )
 
     # 2. Сценарий: Сбор по артикулу
     elif args.article:
@@ -520,16 +580,38 @@ def main() -> None:
 
     # 3. Сценарий: Сбор каталога по поисковому запросу
     else:
-        logger.info("Сбор каталога по запросу: '%s' (страниц: %d)", args.query, args.pages)
+        logger.info("Сбор каталога по запросу: '%s' (страниц: %d, сортировка: %s)", args.query, args.pages, args.sort)
         for page in range(1, args.pages + 1):
-            page_items = scraper.fetch_search_page(query=args.query, page=page)
+            page_items = scraper.fetch_search_page(query=args.query, page=page, sort=args.sort)
             if page_items:
                 products.extend(page_items)
             else:
                 logger.warning("Онлайн-доступ к WB ограничен на странице %d. Переключаюсь на демо-генерацию...", page)
-                demo_items = scraper.generate_demo_catalog(query=args.query, count=20)
+                demo_items = scraper.generate_demo_catalog(
+                    query=args.query,
+                    count=20,
+                    sort=args.sort,
+                    min_price=args.min_price,
+                    max_price=args.max_price,
+                )
                 products.extend(demo_items)
                 break
+
+    # Фильтрация по ценовому диапазону
+    if args.min_price is not None:
+        products = [p for p in products if p.price_spp >= args.min_price]
+    if args.max_price is not None:
+        products = [p for p in products if p.price_spp <= args.max_price]
+
+    # Сортировка итоговой выборки
+    if args.sort == "price_up":
+        products.sort(key=lambda x: x.price_spp)
+    elif args.sort == "price_down":
+        products.sort(key=lambda x: x.price_spp, reverse=True)
+    elif args.sort == "rating":
+        products.sort(key=lambda x: (x.rating, x.feedbacks), reverse=True)
+    elif args.sort == "newly":
+        products.sort(key=lambda x: x.sku, reverse=True)
 
     if not products:
         logger.error("Не удалось сформировать выборку товаров.")
