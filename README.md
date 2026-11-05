@@ -1,11 +1,11 @@
 # 🎯 Wildberries Fast Catalog & Price Scraper
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/Tests-4%2F4%20Passed%20(100%25)-success.svg?logo=checkmarx&logoColor=white)](tests/)
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Target-Wildberries_API-magenta.svg)](https://www.wildberries.ru/)
 [![Output](https://img.shields.io/badge/Output-Excel_CSV_BOM-009688.svg)](https://github.com/viper86rus-arch)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Zero_Pip-blueviolet.svg)](https://github.com/viper86rus-arch)
-[![Architecture](https://img.shields.io/badge/Architecture-Direct_HTTP_API-orange.svg)](https://github.com/viper86rus-arch)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 
 > **Высокоскоростной асинхронный парсер каталога, цен со скидками СПП и складских остатков маркетплейса Wildberries.**  
 > Спроектирован на чистом Python (Zero Dependencies) с прямым обращением к внутренним эндпоинтам мобильного API Wildberries. Обеспечивает мгновенный сбор тысяч товаров без затрат ресурсов на тяжёлые браузеры, детальный расчёт цен с учётом СПП (скидки постоянного покупателя / WB Кошелька) и автоматический экспорт в чистый Excel-ready CSV с кодировкой UTF-8 BOM.
