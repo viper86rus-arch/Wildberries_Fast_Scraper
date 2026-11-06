@@ -19,7 +19,7 @@
 > - ⚡ **Мультиплатформенность:** разработка парсеров Wildberries, Ozon, Яндекс Маркет, Авито, СберМегаМаркет.
 > - 🛡️ **Бесперебойность:** ротация резидентных мобильных прокси, автообход блокировок и защита от капчи.
 >
-> 📩 **Заказать разработку парсера:** [Создать заявку (Issue)](https://github.com/viper86rus-arch/Wildberries_Fast_Scraper/issues) или написать в [Профиль студии V1PER](https://github.com/viper86rus-arch).
+> 📩 **Заказать разработку парсера:** [Заказать на Kwork (Безопасная сделка)](https://kwork.ru/user/V1PER86RUS) • [Создать заявку (Issue)](https://github.com/viper86rus-arch/Wildberries_Fast_Scraper/issues) • [Профиль студии](https://github.com/viper86rus-arch)
 
 ---
 
