@@ -1,13 +1,13 @@
 # 🎯 V1PER IT Solutions | Wildberries Fast Catalog & Price Scraper
 
-[![Tests](https://img.shields.io/badge/Tests-9%2F9%20Passed%20(100%25)-success.svg?logo=checkmarx&logoColor=white)](audit_stress_test.py)
-[![Security](https://img.shields.io/badge/Security-CWE--1236%20Shielded-emerald.svg)](audit_stress_test.py)
-[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![Studio](https://img.shields.io/badge/Studio-V1PER_IT_Solutions-emerald.svg)]()
-[![Platform](https://img.shields.io/badge/Target-Wildberries_API-magenta.svg)](https://www.wildberries.ru/)
-[![Output](https://img.shields.io/badge/Output-Excel_CSV_BOM-009688.svg)](https://github.com/viper86rus-arch)
-[![Dependencies](https://img.shields.io/badge/Dependencies-Zero_Pip-blueviolet.svg)](https://github.com/viper86rus-arch)
-[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
+[![Tests](https://badgen.net/badge/Tests/9%2F9%20Passed/green)](audit_stress_test.py)
+[![Security](https://badgen.net/badge/Security/CWE-1236%20Shielded/green)](audit_stress_test.py)
+[![Python](https://badgen.net/badge/Python/3.10%20-%203.13/blue?icon=python)](https://www.python.org/)
+[![Studio](https://badgen.net/badge/Studio/V1PER%20IT%20Solutions/cyan)](https://github.com/viper86rus-arch)
+[![Target](https://badgen.net/badge/Target/Wildberries%20API/purple)](https://www.wildberries.ru/)
+[![Output](https://badgen.net/badge/Output/Excel%20CSV%20BOM/teal)](wb_scraper.py)
+[![Dependencies](https://badgen.net/badge/Dependencies/Zero-Pip/purple)](wb_scraper.py)
+[![License: MIT](https://badgen.net/badge/license/MIT/yellow)](LICENSE)
 
 > **Высокоскоростной асинхронный парсер каталога, цен со скидками СПП и складских остатков маркетплейса Wildberries от студии V1PER IT Solutions.**  
 > Спроектирован на чистом Python (Zero Dependencies) с прямым обращением к внутренним эндпоинтам мобильного API Wildberries. Обеспечивает мгновенный сбор тысяч товаров без затрат ресурсов на тяжёлые браузеры, детальный расчёт цен с учётом СПП (скидки постоянного покупателя / WB Кошелька), защиту от инъекций формул Excel (CWE-1236), автоматический повтор при лимитах (HTTP 429 Exponential Backoff) и экспорт в чистый Excel-ready CSV с кодировкой UTF-8 BOM.
