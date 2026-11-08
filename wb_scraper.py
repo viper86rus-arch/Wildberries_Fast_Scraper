@@ -149,14 +149,17 @@ class WildberriesScraper:
             "Sec-Fetch-Site": "cross-site",
         }
 
-    def fetch_search_page(self, query: str, page: int = 1, sort: str = "popular") -> List[ProductItem]:
+    def fetch_search_page(
+        self, query: str, page: int = 1, sort: str = "popular", max_retries: int = 3
+    ) -> List[ProductItem]:
         """
-        Сбор одной страницы каталога по поисковому запросу через прямой API.
+        Сбор одной страницы каталога по поисковому запросу через прямой API с защитой от сбоев.
 
         Args:
             query: Поисковый запрос (например, 'кроссовки мужские').
             page: Номер страницы каталога (с 1).
             sort: Режим сортировки (popular, price_up, price_down, rating, newly).
+            max_retries: Максимальное число попыток при временных ошибках сети/WAF.
 
         Returns:
             Список распарсенных объектов ProductItem.
@@ -174,18 +177,52 @@ class WildberriesScraper:
         opener = self._build_opener()
         req = urllib.request.Request(url, headers=self._get_headers())
 
-        try:
-            with opener.open(req, timeout=self.timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception as exc:
-            logger.warning("Сбой онлайн-запроса WB (страница %d): %s", page, exc)
-            return []
+        for attempt in range(max_retries):
+            try:
+                with opener.open(req, timeout=self.timeout) as response:
+                    raw_bytes = response.read()
+                    try:
+                        payload = json.loads(raw_bytes.decode("utf-8"))
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            "Ответ сервера не является валидным JSON на странице %d (возможен WAF / Captcha).",
+                            page,
+                        )
+                        return []
 
-        products = payload.get("data", {}).get("products", [])
-        return self._parse_products(products)
+                    if not isinstance(payload, dict):
+                        return []
+                    data_block = payload.get("data")
+                    if not isinstance(data_block, dict):
+                        return []
+                    products = data_block.get("products")
+                    if not isinstance(products, list):
+                        return []
+                    return self._parse_products(products)
 
-    def fetch_product_by_article(self, article: int) -> Optional[ProductItem]:
-        """Сбор детальной информации по конкретному артикулу товара."""
+            except urllib.error.HTTPError as exc:
+                if exc.code in (429, 500, 502, 503, 504) and attempt < max_retries - 1:
+                    sleep_time = (2 ** attempt) + random.uniform(0.5, 1.5)
+                    logger.warning(
+                        "HTTP %d на странице %d. Повтор через %.1f сек (попытка %d/%d)...",
+                        exc.code,
+                        page,
+                        sleep_time,
+                        attempt + 1,
+                        max_retries,
+                    )
+                    time.sleep(sleep_time)
+                    continue
+                logger.warning("Сбой онлайн-запроса WB (страница %d, HTTP %s): %s", page, exc.code, exc)
+                return []
+            except Exception as exc:
+                logger.warning("Сбой онлайн-запроса WB (страница %d): %s", page, exc)
+                return []
+
+        return []
+
+    def fetch_product_by_article(self, article: int, max_retries: int = 3) -> Optional[ProductItem]:
+        """Сбор детальной информации по конкретному артикулу товара с защитой от сбоев."""
         url = (
             f"https://card.wb.ru/cards/v2/detail?"
             f"appType=1&curr=rub&dest=-1257786&spp=30&nm={article}"
@@ -193,50 +230,133 @@ class WildberriesScraper:
         opener = self._build_opener()
         req = urllib.request.Request(url, headers=self._get_headers())
 
-        try:
-            with opener.open(req, timeout=self.timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-                items = payload.get("data", {}).get("products", [])
-                parsed = self._parse_products(items)
-                return parsed[0] if parsed else None
-        except Exception as exc:
-            logger.warning("Сбой получения карточки артикула %d: %s", article, exc)
-            return None
+        for attempt in range(max_retries):
+            try:
+                with opener.open(req, timeout=self.timeout) as response:
+                    raw_bytes = response.read()
+                    try:
+                        payload = json.loads(raw_bytes.decode("utf-8"))
+                    except json.JSONDecodeError:
+                        logger.warning("Ответ карточки %d не является JSON (возможен WAF / Captcha).", article)
+                        return None
+
+                    if not isinstance(payload, dict):
+                        return None
+                    data_block = payload.get("data")
+                    if not isinstance(data_block, dict):
+                        return None
+                    items = data_block.get("products")
+                    if not isinstance(items, list):
+                        return None
+                    parsed = self._parse_products(items)
+                    return parsed[0] if parsed else None
+
+            except urllib.error.HTTPError as exc:
+                if exc.code in (429, 500, 502, 503, 504) and attempt < max_retries - 1:
+                    sleep_time = (2 ** attempt) + random.uniform(0.5, 1.5)
+                    logger.warning(
+                        "HTTP %d при запросе артикула %d. Повтор через %.1f сек...",
+                        exc.code,
+                        article,
+                        sleep_time,
+                    )
+                    time.sleep(sleep_time)
+                    continue
+                logger.warning("Сбой получения карточки артикула %d (HTTP %s): %s", article, exc.code, exc)
+                return None
+            except Exception as exc:
+                logger.warning("Сбой получения карточки артикула %d: %s", article, exc)
+                return None
+
+        return None
 
     @staticmethod
     def _parse_products(raw_items: List[Dict[str, Any]]) -> List[ProductItem]:
-        """Преобразование сырого JSON-ответа WB в строгие модели ProductItem."""
+        """
+        Преобразование сырого JSON-ответа WB в строгие модели ProductItem.
+        Реализована полная защита от Null-значений, отсутствующих ключей и сдвигов схемы API.
+        """
         results: List[ProductItem] = []
+        if not isinstance(raw_items, list):
+            return results
+
         for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+
             sku = item.get("id")
             if not sku:
                 continue
 
-            title = item.get("name", "Без названия").strip()
-            brand = item.get("brand", "Без бренда").strip()
-            rating = float(item.get("rating", 0.0) or item.get("reviewRating", 0.0))
-            feedbacks = int(item.get("feedbacks", 0))
+            raw_title = item.get("name")
+            title = str(raw_title).strip() if raw_title is not None else "Без названия"
+            if not title:
+                title = "Без названия"
+
+            raw_brand = item.get("brand")
+            brand = str(raw_brand).strip() if raw_brand is not None else "Без бренда"
+            if not brand:
+                brand = "Без бренда"
+
+            raw_rating = item.get("rating") if item.get("rating") is not None else item.get("reviewRating")
+            try:
+                rating = float(raw_rating) if raw_rating is not None else 0.0
+            except (ValueError, TypeError):
+                rating = 0.0
+
+            raw_feedbacks = item.get("feedbacks")
+            try:
+                feedbacks = int(raw_feedbacks) if raw_feedbacks is not None else 0
+            except (ValueError, TypeError):
+                feedbacks = 0
 
             # Парсинг ценового блока (цены приходят в копейках, делим на 100)
-            sizes = item.get("sizes", [])
+            sizes = item.get("sizes")
             price_orig = 0.0
             price_spp = 0.0
             total_stock = 0
             stocks_by_wh: Dict[str, int] = {}
 
-            if sizes:
+            if isinstance(sizes, list) and sizes:
                 first_size = sizes[0]
-                price_data = first_size.get("price", {})
-                if price_data:
-                    price_orig = price_data.get("basic", 0) / 100.0
-                    price_spp = price_data.get("total", 0) / 100.0
+                if isinstance(first_size, dict):
+                    price_data = first_size.get("price")
+                    if isinstance(price_data, dict):
+                        raw_basic = price_data.get("basic")
+                        raw_total = price_data.get("total")
+                        try:
+                            if raw_basic is not None:
+                                price_orig = float(raw_basic) / 100.0
+                        except (ValueError, TypeError):
+                            price_orig = 0.0
+                        try:
+                            if raw_total is not None:
+                                price_spp = float(raw_total) / 100.0
+                        except (ValueError, TypeError):
+                            price_spp = 0.0
 
                 # Агрегация складских остатков по размерам
                 for size in sizes:
-                    stocks = size.get("stocks", [])
+                    if not isinstance(size, dict):
+                        continue
+                    stocks = size.get("stocks")
+                    if not isinstance(stocks, list):
+                        continue
                     for st in stocks:
-                        qty = st.get("qty", 0)
-                        wh_id = st.get("wh", 0)
+                        if not isinstance(st, dict):
+                            continue
+                        raw_qty = st.get("qty")
+                        try:
+                            qty = int(raw_qty) if raw_qty is not None else 0
+                        except (ValueError, TypeError):
+                            qty = 0
+
+                        raw_wh = st.get("wh")
+                        try:
+                            wh_id = int(raw_wh) if raw_wh is not None else 0
+                        except (ValueError, TypeError):
+                            wh_id = 0
+
                         wh_name = WB_WAREHOUSES.get(wh_id, f"Склад ID {wh_id}")
                         total_stock += qty
                         stocks_by_wh[wh_name] = stocks_by_wh.get(wh_name, 0) + qty
@@ -344,9 +464,33 @@ class WildberriesScraper:
 # 4. ЭКСПОРТ ДАННЫХ (CSV UTF-8 BOM И JSON)
 # ==============================================================================
 
+def _sanitize_csv_cell(value: Any) -> Any:
+    """
+    Обезвреживание потенциальных формул Excel (CWE-1236 CSV Formula Injection).
+
+    Если ячейка начинается с =, +, -, @, \\t, \\r, предваряем её одинарным апострофом ('),
+    чтобы предотвратить несанкционированное исполнение DDE-команд в Microsoft Excel.
+    """
+    if isinstance(value, str):
+        cleaned = value.replace("\r", " ").replace("\n", " ").strip()
+        if cleaned and cleaned[0] in ("=", "+", "-", "@"):
+            return f"'{cleaned}"
+        return cleaned
+    return value
+
+
+def _sanitize_output_path(output_path: Path) -> Path:
+    """Валидация и нормализация выходного пути (защита от CWE-22 Path Traversal)."""
+    resolved = output_path.resolve()
+    if resolved.suffix.lower() not in (".csv", ".json"):
+        raise ValueError(f"Недопустимое расширение файла: {resolved.suffix}. Разрешены только .csv и .json")
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    return resolved
+
+
 def export_to_csv(products: List[ProductItem], output_path: Path) -> Path:
     """
-    Экспорт карточек товаров в CSV-файл с UTF-8 BOM для безупречного открытия в Excel.
+    Экспорт собранных товаров в CSV с поддержкой UTF-8 BOM для Microsoft Excel.
 
     Args:
         products: Список карточек ProductItem.
@@ -355,7 +499,7 @@ def export_to_csv(products: List[ProductItem], output_path: Path) -> Path:
     Returns:
         Разрешенный путь к созданному файлу.
     """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path = _sanitize_output_path(output_path)
     fieldnames = [
         "Артикул WB",
         "Бренд",
@@ -379,36 +523,35 @@ def export_to_csv(products: List[ProductItem], output_path: Path) -> Path:
             stocks_str = ", ".join(
                 f"{wh}: {qty}" for wh, qty in p.stocks_by_warehouse.items() if qty > 0
             )
-            writer.writerow(
-                [
-                    p.sku,
-                    p.brand,
-                    p.title,
-                    f"{p.price_original:.2f}".replace(".", ","),
-                    f"{p.price_spp:.2f}".replace(".", ","),
-                    p.discount_percent,
-                    f"{p.rating:.1f}".replace(".", ","),
-                    p.feedbacks,
-                    p.total_stock,
-                    stocks_str if stocks_str else "Под заказ / Нет данных",
-                    p.url,
-                    p.scraped_at,
-                ]
-            )
+            row = [
+                p.sku,
+                _sanitize_csv_cell(p.brand),
+                _sanitize_csv_cell(p.title),
+                f"{p.price_original:.2f}".replace(".", ","),
+                f"{p.price_spp:.2f}".replace(".", ","),
+                p.discount_percent,
+                f"{p.rating:.1f}".replace(".", ","),
+                p.feedbacks,
+                p.total_stock,
+                _sanitize_csv_cell(stocks_str if stocks_str else "Под заказ / Нет данных"),
+                _sanitize_csv_cell(p.url),
+                p.scraped_at,
+            ]
+            writer.writerow(row)
 
-    logger.info("Успешный экспорт CSV (Excel-ready) -> %s", output_path.resolve())
+    logger.info("Успешный экспорт CSV (Excel-ready) -> %s", output_path)
     return output_path
 
 
 def export_to_json(products: List[ProductItem], output_path: Path) -> Path:
     """Сохранение карточек товаров в структурированный JSON-файл."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path = _sanitize_output_path(output_path)
     data = [p.to_dict() for p in products]
 
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    logger.info("Успешный экспорт JSON -> %s", output_path.resolve())
+    logger.info("Успешный экспорт JSON -> %s", output_path)
     return output_path
 
 
@@ -557,6 +700,7 @@ def main() -> None:
     logger.info("Запуск промышленного парсера Wildberries...")
 
     # 1. Сценарий: Демо-режим (офлайн валидация)
+    interrupted = False
     if args.demo:
         query_text = args.query or "демо-товары"
         logger.info("Активирован демонстрационный режим для запроса: '%s'", query_text)
@@ -575,26 +719,45 @@ def main() -> None:
         if card:
             products.append(card)
         else:
-            logger.warning("Товар по артикулу %d не найден онлайн. Переключаюсь на демо...", args.article)
-            products = scraper.generate_demo_catalog(query=f"Товар {args.article}", count=1)
+            logger.warning("Товар по артикулу %d не найден онлайн.", args.article)
 
     # 3. Сценарий: Сбор каталога по поисковому запросу
     else:
-        logger.info("Сбор каталога по запросу: '%s' (страниц: %d, сортировка: %s)", args.query, args.pages, args.sort)
+        logger.info(
+            "Сбор каталога по запросу: '%s' (страниц: %d, сортировка: %s)",
+            args.query,
+            args.pages,
+            args.sort,
+        )
         for page in range(1, args.pages + 1):
-            page_items = scraper.fetch_search_page(query=args.query, page=page, sort=args.sort)
-            if page_items:
-                products.extend(page_items)
-            else:
-                logger.warning("Онлайн-доступ к WB ограничен на странице %d. Переключаюсь на демо-генерацию...", page)
-                demo_items = scraper.generate_demo_catalog(
-                    query=args.query,
-                    count=20,
-                    sort=args.sort,
-                    min_price=args.min_price,
-                    max_price=args.max_price,
+            try:
+                page_items = scraper.fetch_search_page(
+                    query=args.query, page=page, sort=args.sort
                 )
-                products.extend(demo_items)
+                if page_items:
+                    products.extend(page_items)
+                    logger.info(
+                        "Страница %d/%d: успешно собрано %d товаров (всего в выборке: %d)",
+                        page,
+                        args.pages,
+                        len(page_items),
+                        len(products),
+                    )
+                    # Вежливая пауза между страницами для предотвращения WAF Rate Limiting
+                    if page < args.pages:
+                        time.sleep(random.uniform(1.0, 2.0))
+                else:
+                    if page == 1 and not products:
+                        logger.warning(
+                            "Онлайн-доступ к WB ограничен или каталог по запросу '%s' пуст.",
+                            args.query,
+                        )
+                    else:
+                        logger.info("Страница %d пуста. Каталог завершен.", page)
+                    break
+            except KeyboardInterrupt:
+                logger.warning("\nСбор прерван пользователем на странице %d.", page)
+                interrupted = True
                 break
 
     # Фильтрация по ценовому диапазону
@@ -614,7 +777,9 @@ def main() -> None:
         products.sort(key=lambda x: x.sku, reverse=True)
 
     if not products:
-        logger.error("Не удалось сформировать выборку товаров.")
+        logger.error(
+            "Не удалось сформировать выборку товаров. Попробуйте флаг --demo для офлайн-проверки структуры отчёта."
+        )
         sys.exit(1)
 
     # Вывод красивой таблицы в консоль
@@ -622,17 +787,24 @@ def main() -> None:
 
     # Экспорт в файл
     out_file = Path(args.output)
-    if out_file.suffix.lower() == ".json":
-        export_to_json(products, out_file)
-    else:
-        export_to_csv(products, out_file)
+    try:
+        if out_file.suffix.lower() == ".json":
+            export_to_json(products, out_file)
+        else:
+            export_to_csv(products, out_file)
+    except ValueError as err:
+        logger.error("Ошибка пути экспорта: %s", err)
+        sys.exit(1)
 
     logger.info("Сбор завершен! Всего сохранено товаров: %d", len(products))
+    if interrupted:
+        logger.info("Сохранено %d собранных до прерывания товаров.", len(products))
+        sys.exit(130)
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        logger.warning("\nСбор прерван пользователем.")
+        logger.warning("\nПроцесс прерван пользователем.")
         sys.exit(130)

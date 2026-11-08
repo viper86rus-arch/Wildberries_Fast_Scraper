@@ -1,6 +1,7 @@
 # 🎯 V1PER IT Solutions | Wildberries Fast Catalog & Price Scraper
 
-[![Tests](https://img.shields.io/badge/Tests-4%2F4%20Passed%20(100%25)-success.svg?logo=checkmarx&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-9%2F9%20Passed%20(100%25)-success.svg?logo=checkmarx&logoColor=white)](audit_stress_test.py)
+[![Security](https://img.shields.io/badge/Security-CWE--1236%20Shielded-emerald.svg)](audit_stress_test.py)
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Studio](https://img.shields.io/badge/Studio-V1PER_IT_Solutions-emerald.svg)]()
 [![Platform](https://img.shields.io/badge/Target-Wildberries_API-magenta.svg)](https://www.wildberries.ru/)
@@ -9,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 
 > **Высокоскоростной асинхронный парсер каталога, цен со скидками СПП и складских остатков маркетплейса Wildberries от студии V1PER IT Solutions.**  
-> Спроектирован на чистом Python (Zero Dependencies) с прямым обращением к внутренним эндпоинтам мобильного API Wildberries. Обеспечивает мгновенный сбор тысяч товаров без затрат ресурсов на тяжёлые браузеры, детальный расчёт цен с учётом СПП (скидки постоянного покупателя / WB Кошелька) и автоматический экспорт в чистый Excel-ready CSV с кодировкой UTF-8 BOM.
+> Спроектирован на чистом Python (Zero Dependencies) с прямым обращением к внутренним эндпоинтам мобильного API Wildberries. Обеспечивает мгновенный сбор тысяч товаров без затрат ресурсов на тяжёлые браузеры, детальный расчёт цен с учётом СПП (скидки постоянного покупателя / WB Кошелька), защиту от инъекций формул Excel (CWE-1236), автоматический повтор при лимитах (HTTP 429 Exponential Backoff) и экспорт в чистый Excel-ready CSV с кодировкой UTF-8 BOM.
 
 > [!IMPORTANT]
 > **🚀 Разработка парсеров маркетплейсов и e-commerce под ключ:**  
@@ -19,7 +20,7 @@
 > - ⚡ **Мультиплатформенность:** разработка парсеров Wildberries, Ozon, Яндекс Маркет, Авито, СберМегаМаркет.
 > - 🛡️ **Бесперебойность:** ротация резидентных мобильных прокси, автообход блокировок и защита от капчи.
 >
-> 📩 **Заказать разработку парсера:** [Заказать на Kwork (Безопасная сделка)](https://kwork.ru/user/V1PER86RUS) • [Создать заявку (Issue)](https://github.com/viper86rus-arch/Wildberries_Fast_Scraper/issues) • [Профиль студии](https://github.com/viper86rus-arch)
+> 📩 **Заказать разработку парсера:** [Заказать на Kwork (Безопасная сделка)](https://kwork.ru/user/viper86rus-arch) • [Создать заявку (Issue)](https://github.com/viper86rus-arch/Wildberries_Fast_Scraper/issues) • [Профиль студии](https://github.com/viper86rus-arch)
 
 ---
 
