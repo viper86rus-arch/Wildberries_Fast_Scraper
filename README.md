@@ -9,7 +9,7 @@
 [![Dependencies](https://badgen.net/badge/Dependencies/Zero-Pip/purple)](wb_scraper.py)
 [![License: MIT](https://badgen.net/badge/license/MIT/yellow)](LICENSE)
 
-> **Высокоскоростной асинхронный парсер каталога, цен со скидками СПП и складских остатков маркетплейса Wildberries от студии V1PER IT Solutions.**  
+> **Высокоскоростной API-парсер прямого доступа к каталогу, ценам со скидками СПП и складским остаткам маркетплейса Wildberries от студии V1PER IT Solutions.**  
 > Спроектирован на чистом Python (Zero Dependencies) с прямым обращением к внутренним эндпоинтам мобильного API Wildberries. Обеспечивает мгновенный сбор тысяч товаров без затрат ресурсов на тяжёлые браузеры, детальный расчёт цен с учётом СПП (скидки постоянного покупателя / WB Кошелька), защиту от инъекций формул Excel (CWE-1236), автоматический повтор при лимитах (HTTP 429 Exponential Backoff) и экспорт в чистый Excel-ready CSV с кодировкой UTF-8 BOM.
 
 > [!IMPORTANT]
@@ -67,7 +67,7 @@
 
 ```text
 scrapers/
-├── wb_scraper.py    # Высокоскоростной асинхронный парсер Wildberries API
+├── wb_scraper.py    # Высокоскоростной Zero-Pip парсер Wildberries Direct API
 ├── README.md        # Техническая документация и примеры вызовов
 ├── LICENSE          # Лицензия MIT (2026)
 └── results/         # Каталог экспорта отчётов
